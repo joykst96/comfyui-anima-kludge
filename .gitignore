@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# code only: never commit model weights
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
