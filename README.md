@@ -26,7 +26,8 @@ sync. Defaults match ComfyUI-Spectrum-KSampler (30 steps: 17 full model calls, 1
 
 **Anima SPEED** (`KludgeAnimaSPEED`) — SPD multi-resolution sampling: the early steps run on a
 half-size latent, which is then spectrally expanded to full size at sigma 0.7. Unlike the original
-SPEED sampler (Euler only) it wraps whichever sampler the KSampler uses. Changes the composition. With
+SPEED sampler (Euler only) it wraps whichever sampler the KSampler uses. Changes the composition:
+content tags hold, pose and camera tags (lying, from above, drawing bow) can get lost. With
 Anima Spectrum on the same model it is the full SPEED; it pays off at large sizes (1536²), at 1024²
 Spectrum alone is faster.
 
