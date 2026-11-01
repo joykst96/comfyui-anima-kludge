@@ -2,7 +2,7 @@
 
 Known risks and what to check after updating ComfyUI, comfy-kitchen or torch.
 
-Tested with ComfyUI 0.43.0, comfy-kitchen 0.2.40, torch 2.14.1+cu130 (2026-10-29).
+Tested with ComfyUI 0.43.0, comfy-kitchen 0.2.40, torch 2.14.1+cu130 (2026-10-29; Spectrum and SPEED 2026-11-01).
 Recheck after updating any of these. The quickest check for each node is listed with it.
 
 ## Block Compile — the stopgap one, steps off ComfyUI's direction
@@ -53,3 +53,47 @@ Recheck after updating any of these. The quickest check for each node is listed 
   this node; that's expected, not a bug.
 - Check: node output must be bit-identical to a file made by comfy-model-tools
   (`quant_int8_convrot.py`, default options) for the same model.
+
+## Spectrum — re-implements the end of the Anima forward
+
+Tested 2026-11-01 against ComfyUI-Spectrum-KSampler 2.13.0.
+
+- On predicted steps the node runs its own copy of the tail of `MiniTrainDIT._forward`
+  (`comfy/ldm/cosmos/predict2.py`): `t_embedder[0]` → cast → `t_embedder[1]` → `t_embedding_norm`
+  → `final_layer(x, emb, adaln_lora_B_T_3D=...)` → `unpatchify` → crop. If ComfyUI changes that
+  tail (new modulation, another final layer argument), predicted steps go wrong silently.
+- The feature is caught with a pre-hook on `final_layer`, inside a `DIFFUSION_MODEL` wrapper. Works
+  with per-block compile; the core TorchCompileModel (whole model compiled) traces the wrapper and is
+  not supported. If Anima moves to the memory compiler (`comfy/model_prefetch.py`), the copy is
+  already made under `pause_malloc_graph`.
+- Relies on `transformer_options` keys `sample_sigmas`, `sigmas`, `cond_or_uncond`, `uuids`, and on
+  the flow model getting sigma 1.0 as 0.99997 (matched with a 1e-4 tolerance). If steps stop being
+  found, every call runs the full model: the log line then shows few or no predicted steps.
+- ControlNet-style `control` input → full model calls only.
+- Check: with defaults and 30 steps the log says `30 steps, 17 full model calls, 13 predicted`. Next
+  to the original DiT Spectrum Patch (same settings, er_sde) the images look the same and both sit
+  in the same PSNR range against no Spectrum (19-26 dB, 3 prompts x 2 seeds); kludge vs original is
+  25-33 dB. Not bit-identical: the original rounds the forecast to bf16.
+
+## SPEED — swaps the sampler function for one call
+
+- Wraps `SAMPLER_SAMPLE`; when the sampler is a `KSAMPLER` it temporarily replaces
+  `sampler_function` with a two-stage function (low-res sigmas, expand, re-spaced full-res sigmas)
+  and restores it afterwards. Relies on the k-diffusion call signature
+  `(model, x, sigmas, extra_args, callback, disable, **options)`, on `extra_args["seed"]` and
+  `extra_args["model_options"]["transformer_options"]["sample_sigmas"]`, and on the callback dict's
+  `"i"`.
+- Turns itself off (with a log line) for inpainting masks, non-k-diffusion samplers and schedules that
+  start below the handoff sigma (low-denoise img2img / hires pass).
+- Conditioning that depends on the latent size (area conds, concat latents) is not handled at the
+  low-res stage.
+- Block Compile sees two latent sizes, so torch.compile switches to dynamic shapes on the first run
+  (longer first compile).
+- Measured with CK + int8 + Block Compile, er_sde 30 steps (no patch → Spectrum / SPEED /
+  SPEED + Spectrum): 2B 1024² 6.58 → 3.98 / 5.28 / 4.95 s, 2B 1536² 17.53 → 10.43 / 10.23 / 9.10 s,
+  2.9B 1024² 9.24 → 5.52 / 7.73 / 6.62 s. At 1024² the low-res stage is too small to use the GPU well
+  and only 2 of the 13 full-res steps get predicted, so Spectrum alone wins there.
+- Check: SPEED + Spectrum with `euler` must stay close to the original `KSampler (Spectrum + SPD /
+  SPEED)` with `adaptive_smc_alpha` 0 (33-35 dB, 3 prompts x 2 seeds; same composition), and the log
+  shows `64x64 for 17 steps, then 128x128 from sigma 0.6970 (aligned 0.8215)` at 1024², 30 steps,
+  simple scheduler.
