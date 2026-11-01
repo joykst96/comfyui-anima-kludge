@@ -12,6 +12,7 @@ the chosen sampler and calls it twice (low-res sigmas, then the re-spaced full-r
 k-diffusion sampler works. Multistep samplers restart their history at the handoff.
 """
 
+import functools
 import logging
 import math
 
@@ -78,6 +79,7 @@ def _with_schedule(extra_args, sigmas, lowres):
 
 
 def _two_stage(sampler_function, k, scale):
+    @functools.wraps(sampler_function)  # keeps __name__ for KludgeAnimaSpectrum's sampler check
     def sample(model, x, sigmas, extra_args=None, callback=None, disable=None, **options):
         size = x.shape[-2:]
         x_lo = sampler_function(model, _lowpass(x, scale), sigmas[:k + 1],
@@ -105,11 +107,15 @@ def _sampler_sample_wrapper(scale, handoff_sigma):
         sampler = executor.class_obj
         values = sigmas.tolist()
         k = next((i for i, s in enumerate(values) if s <= handoff_sigma), len(values) - 1)
+        sigma_max = float(guider.model_patcher.get_model_object("model_sampling").sigma_max)
         reason = None
         if not isinstance(sampler, comfy.samplers.KSAMPLER):
             reason = f"sampler {type(sampler).__name__} is not a k-diffusion sampler"
         elif denoise_mask is not None:
             reason = "inpainting mask"
+        elif values[0] < 0.999 * sigma_max:
+            # img2img / hires pass: shrinking the image latent and expanding it again only blurs it
+            reason = f"partial denoise (starts at sigma {values[0]:.4f})"
         elif k == 0:
             reason = f"schedule starts at sigma {values[0]:.4f}, below the handoff"
         elif k >= len(values) - 2:

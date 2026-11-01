@@ -25,6 +25,11 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 STATE_KEY = "kludge_spectrum"
+# SDE multistep samplers: a predicted step can't react to the noise injected the step before, and their
+# multistep correction amplifies the mismatch (iridescent blotches; 3m_sde breaks up). Same with the
+# original Spectrum patch. Spectrum stays off for these; er_sde, euler_ancestral, dpmpp_sde are fine.
+UNSUPPORTED_SAMPLERS = {f"sample_dpmpp_{s}" for s in ("2m_sde", "2m_sde_gpu", "2m_sde_heun", "2m_sde_heun_gpu",
+                                                      "3m_sde", "3m_sde_gpu")}
 # set by the SPEED node on its low-resolution stage: those steps always run the full model
 LOWRES_KEY = "kludge_spd_lowres"
 
@@ -207,6 +212,11 @@ def _diffusion_model_wrapper(executor, x, timesteps, context, *args, **kwargs):
 
 def _sampler_sample_wrapper(cfg):
     def wrapper(executor, guider, sigmas, extra_args, *args, **kwargs):
+        name = getattr(getattr(executor.class_obj, "sampler_function", None), "__name__", "")
+        if name in UNSUPPORTED_SAMPLERS:
+            logger.warning("KludgeAnimaSpectrum: off for %s (SDE multistep samplers get color blotches with "
+                           "Spectrum); use er_sde, euler, dpmpp_2m or euler_ancestral", name[len("sample_"):])
+            return executor(guider, sigmas, extra_args, *args, **kwargs)
         transformer_options = extra_args["model_options"].setdefault("transformer_options", {})
         state = transformer_options[STATE_KEY] = _State(cfg)
         try:

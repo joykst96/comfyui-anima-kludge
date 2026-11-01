@@ -23,13 +23,17 @@ Manager, core LoRA loader, ...). LoRAs already made for 2.9B and 2B models are l
 transformer blocks are skipped and their output is predicted from earlier steps. A model patch, so the
 normal KSampler stays; the step count is read from the sampler, so there is no steps input to keep in
 sync. Defaults match ComfyUI-Spectrum-KSampler (30 steps: 17 full model calls, 13 predicted).
+Use er_sde, euler, euler_ancestral, dpmpp_2m, uni_pc or heun; it switches itself off for the
+dpmpp_2m/3m SDE samplers, which get color blotches with Spectrum. Keeps the full-call features in
+VRAM: about +0.5 GB at 1024² and +1.2 GB at 1536² (batch 1; `history_size` 8 halves it).
 
 **Anima SPEED** (`KludgeAnimaSPEED`) — SPD multi-resolution sampling: the early steps run on a
 half-size latent, which is then spectrally expanded to full size at sigma 0.7. Unlike the original
 SPEED sampler (Euler only) it wraps whichever sampler the KSampler uses. Changes the composition:
 content tags hold, pose and camera tags (lying, from above, drawing bow) can get lost. With
 Anima Spectrum on the same model it is the full SPEED; it pays off at large sizes (1536²), at 1024²
-Spectrum alone is faster.
+Spectrum alone is faster. Only acts on full-denoise sampling: a hires pass or img2img on the same
+model runs normally.
 
 **Anima Block Compile** (`KludgeAnimaBlockCompile`) — `torch.compile` per transformer block, also
 with Comfy Kitchen attention (`--use-ck-attention`). Turns off dynamic VRAM for the model and uses a

@@ -70,6 +70,19 @@ Tested 2026-11-01 against ComfyUI-Spectrum-KSampler 2.13.0.
   the flow model getting sigma 1.0 as 0.99997 (matched with a 1e-4 tolerance). If steps stop being
   found, every call runs the full model: the log line then shows few or no predicted steps.
 - ControlNet-style `control` input → full model calls only.
+- Samplers (2026-11-01, 3 scenes each, 100% crops): euler, er_sde, euler_ancestral, dpmpp_2m, uni_pc,
+  heun, dpmpp_sde clean. dpmpp_2m_sde(_gpu) gets iridescent blotches and dpmpp_3m_sde breaks up; the
+  original DiT Spectrum Patch does the same, so it is the method, not this code: a predicted step
+  can't react to the noise injected the step before, and the multistep correction amplifies that.
+  The node checks `sampler_function.__name__` against `UNSUPPORTED_SAMPLERS` and stays off for them;
+  a renamed or new SDE multistep sampler would slip through. Multi-call samplers: off-grid
+  (midpoint) calls always run the full model, so dpmpp_sde gains little (18 vs 20 s); heun predicts
+  26 of 59 calls.
+- Extra VRAM (memtrace peak, 2B, batch 1): +512 MB at 1024², +1152 MB at 1536² with
+  `history_size` 100; +256 / +576 MB with 8, which looked the same at 100% (25-28 dB vs 100).
+- Also checked: 2.9B with a 2B LoRA + Remap + compile (LoRA applied), batch 2, CFG 1, 20 and 50
+  steps (`20 steps, 14 full, 6 predicted`; `50 steps, 22 full, 28 predicted`), hires 2-pass on the
+  same patched model (each pass gets its own forecast), five 1536-area buckets.
 - Check: with defaults and 30 steps the log says `30 steps, 17 full model calls, 13 predicted`. Next
   to the original DiT Spectrum Patch (same settings, er_sde) the images look the same and both sit
   in the same PSNR range against no Spectrum (19-26 dB, 3 prompts x 2 seeds); kludge vs original is
@@ -83,8 +96,11 @@ Tested 2026-11-01 against ComfyUI-Spectrum-KSampler 2.13.0.
   `(model, x, sigmas, extra_args, callback, disable, **options)`, on `extra_args["seed"]` and
   `extra_args["model_options"]["transformer_options"]["sample_sigmas"]`, and on the callback dict's
   `"i"`.
-- Turns itself off (with a log line) for inpainting masks, non-k-diffusion samplers and schedules that
-  start below the handoff sigma (low-denoise img2img / hires pass).
+- Turns itself off (with a log line) for inpainting masks, non-k-diffusion samplers and partial
+  denoise (first sigma below `model_sampling.sigma_max`). Without that check a hires pass at denoise
+  0.5 (starts at sigma 0.75) shrank and re-expanded the upscaled image and came out blurred.
+- The two-stage function keeps the sampler's `__name__` (functools.wraps) so Spectrum's sampler
+  check still works when SPEED is outside it.
 - Conditioning that depends on the latent size (area conds, concat latents) is not handled at the
   low-res stage.
 - Block Compile sees two latent sizes, so torch.compile switches to dynamic shapes on the first run
@@ -92,7 +108,12 @@ Tested 2026-11-01 against ComfyUI-Spectrum-KSampler 2.13.0.
 - Measured with CK + int8 + Block Compile, er_sde 30 steps (no patch → Spectrum / SPEED /
   SPEED + Spectrum): 2B 1024² 6.58 → 3.98 / 5.28 / 4.95 s, 2B 1536² 17.53 → 10.43 / 10.23 / 9.10 s,
   2.9B 1024² 9.24 → 5.52 / 7.73 / 6.62 s. At 1024² the low-res stage is too small to use the GPU well
-  and only 2 of the 13 full-res steps get predicted, so Spectrum alone wins there.
+  and only 2 of the 13 full-res steps get predicted, so Spectrum alone wins there. 1536-area
+  buckets (1536², 1344x1728, 1728x1344, 1152x2048, 2048x1152): 16.3-16.6 → 9.7-10.0 / - /
+  9.0-9.5 s, all coherent.
+- Works with every k-diffusion sampler tried (the 8 above for Spectrum, plus dpmpp_2m_sde and
+  dpmpp_3m_sde_gpu with SPEED alone); multistep samplers restart their history at the handoff.
+  With 20 steps the full-res stage has 8 steps and Spectrum predicts none of them.
 - Check: SPEED + Spectrum with `euler` must stay close to the original `KSampler (Spectrum + SPD /
   SPEED)` with `adaptive_smc_alpha` 0 (33-35 dB, 3 prompts x 2 seeds; same composition), and the log
   shows `64x64 for 17 steps, then 128x128 from sigma 0.6970 (aligned 0.8215)` at 1024², 30 steps,
