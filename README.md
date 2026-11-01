@@ -26,6 +26,7 @@ sync. Defaults match ComfyUI-Spectrum-KSampler (30 steps: 17 full model calls, 1
 Use er_sde, euler, euler_ancestral, dpmpp_2m, uni_pc or heun; it switches itself off for the
 dpmpp_2m/3m SDE samplers, which get color blotches with Spectrum. Keeps the full-call features in
 VRAM: about +0.5 GB at 1024² and +1.2 GB at 1536² (batch 1; `history_size` 8 halves it).
+Plain Spectrum only: the original's mod guidance, SEA scheduling and CFG corrections are not included.
 
 **Anima SPEED** (`KludgeAnimaSPEED`) — SPD multi-resolution sampling: the early steps run on a
 half-size latent, which is then spectrally expanded to full size at sigma 0.7. Unlike the original
@@ -44,9 +45,11 @@ Update risks and checks for each node: [MAINTENANCE.md](MAINTENANCE.md).
 ## License
 
 MIT, Copyright (c) 2026 joykst96 (see LICENSE). Code only; no model weights are included.
-`block_compile.py` is based on AnimaBlockCompile by Seunghyun Ji, MIT License
-(see LICENSE-anima-blockcompile). `spectrum.py` and `speed.py` follow ComfyUI-Spectrum-KSampler by
-sorryhyun, MIT License (see LICENSE-spectrum-ksampler).
+Parts follow other MIT-licensed code, whose notices are kept:
+
+- `block_compile.py`: AnimaBlockCompile from anima_lora by Seunghyun Ji (LICENSE-anima-lora).
+- `spectrum.py`, `speed.py`: ComfyUI-Spectrum-KSampler by sorryhyun (LICENSE-spectrum-ksampler);
+  the spectral expansion in `speed.py` follows anima_lora's `spd_core` (LICENSE-anima-lora).
 
 ## Thanks
 
@@ -57,6 +60,8 @@ These projects were referenced while making this pack. Thank you to their author
 - [ComfyUI-Spectrum-KSampler](https://github.com/sorryhyun/ComfyUI-Spectrum-KSampler) by sorryhyun:
   the Spectrum and SPEED samplers that the Spectrum and SPEED nodes follow and were checked against.
   Papers: Spectrum (Han et al., CVPR 2026, arXiv:2603.01623), SPD (Xiao et al., arXiv:2605.18736).
+- [anima_lora](https://github.com/sorryhyun/anima_lora) by Seunghyun Ji: the SPD spectral expansion
+  (`networks/spd_core.py`) and the method notes behind Spectrum and SPEED on Anima.
 - [ComfyUI-EasyUseAnima](https://github.com/n0va39/ComfyUI-EasyUseAnima) by n0va39: its 2.9B LoRA
   support uses the same 2B → 2.9B block table, which helped confirm the mapping. Its AiO sampler
   showed how Spectrum and SPEED are used in practice.

@@ -6,8 +6,8 @@ block embedded in the full grid, the new high frequencies filled with sigma-scal
 remaining sigmas are re-spaced to the aligned sigma. With KludgeAnimaSpectrum on the same model the
 full-resolution part is forecast, which is SPEED (Spectrum + SPD) as in ComfyUI-Spectrum-KSampler.
 
-Expansion geometry follows anima_lora's spd_core (vendored in ComfyUI-Spectrum-KSampler by sorryhyun,
-MIT License, LICENSE-spectrum-ksampler). Different here: instead of a custom Euler loop, the node wraps
+Expansion geometry follows networks/spd_core.py of anima_lora by Seunghyun Ji, MIT License
+(LICENSE-anima-lora), as vendored in ComfyUI-Spectrum-KSampler (LICENSE-spectrum-ksampler). Different here: instead of a custom Euler loop, the node wraps
 the chosen sampler and calls it twice (low-res sigmas, then the re-spaced full-res sigmas), so any
 k-diffusion sampler works. Multistep samplers restart their history at the handoff.
 """

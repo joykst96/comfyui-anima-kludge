@@ -1,7 +1,7 @@
 """Per-block torch.compile for the Anima DiT, with Comfy Kitchen attention support.
 
 Based on AnimaBlockCompile from comfyui-anima-blockcompile, Copyright (c) 2026 Seunghyun Ji, MIT License
-(LICENSE-anima-blockcompile): torch.compile each transformer block through ComfyUI core's
+(LICENSE-anima-lora): torch.compile each transformer block through ComfyUI core's
 set_torch_compile_wrapper. Added here: CK attention routing.
 
 Anima calls attention with tensor containers, and CK's container path (prequantize_int8_attention)
